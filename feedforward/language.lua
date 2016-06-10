@@ -50,6 +50,9 @@ d = params['embedding']
 h = params['hidden']
 
 batch_size = params['batch_size']
+nbatches = train:size(1)/batch_size
+print('Train size:', train:size(1), 'Valid size:', valid:size(1), 'Test size', test:size(1))
+print('Batch size:', batch_size, 'Number of batches:', train:size(1)/batch_size)
 learning_rate = params['eta']
 
 if params['cuda'] >= 1 then
@@ -80,6 +83,7 @@ end
 model:add(nn.LogSoftMax())
 criterion = nn.ClassNLLCriterion()
 
+
 if params['cuda'] >= 1 then
     model:cuda()
     criterion:cuda()
@@ -103,7 +107,8 @@ function validate(inputs, outputs)
         end
         size = size + input:size(1)
     end
-    return math.exp((-1/inputs:size(1)) * sum)
+    return math.exp((-1/(size) * sum))
+    --return math.exp((-1/inputs:size(1)) * sum)
 end
 
 ------------------------
@@ -112,9 +117,12 @@ end
 model:reset()
 last_perp = 0
 
+perplexity = validate(valid, valid_t)
+print("Initial valid ppl:", perplexity)
+
 for epoch = 1, params['nepochs'] do
     nll = 0
-    for j = 1, train:size(1)/batch_size do
+    for j = 1, nbatches do
         model:zeroGradParameters()
         input = train:narrow(1, (j-1)*batch_size+1, batch_size)
         target = train_t:narrow(1, (j-1)*batch_size+1, batch_size)
@@ -132,6 +140,14 @@ for epoch = 1, params['nepochs'] do
         model:updateParameters(learning_rate)
     end
 
+    --[[
+    print(torch.max(W_word.weight), torch.min(W_word.weight))
+    print(torch.max(W1.weight), torch.min(W1.weight))
+    print(torch.max(W1.bias), torch.min(W1.bias))
+    print(torch.max(W2.weight), torch.min(W2.weight))
+    print(torch.max(W2.bias), torch.min(W2.bias))
+    --]]
+
     -- Calculate the perplexity, if it has increased since last
     -- epoch, half the learning rate
     perplexity = validate(valid, valid_t)
@@ -144,7 +160,7 @@ for epoch = 1, params['nepochs'] do
     if params['renorm'] == 1 then
         renorm(E.weight, 1) -- th = 1 taken from Sasha's code
     end
-    print("Epoch:", epoch, "Loss:", nll, "Valid ppl:", perplexity)
+    print("Epoch:", epoch, "Loss:", math.exp(nll/nbatches), "Valid ppl:", perplexity)
 end
 
 
